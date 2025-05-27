@@ -50,32 +50,58 @@ def extract_json_from_text(text):
                 
         raise ValueError(f"Could not extract valid JSON from response: {text[:200]}...")
 
-def generate_questions_with_gemini(skills, api_key, difficulty='medium'):
+def generate_questions_with_gemini(skills, api_key, job_description="", experience_level="mid", question_types=None, difficulty="medium"):
     """Generate questions with robust JSON handling"""
     try:
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-2.0-flash')
         
-        prompt = f"""
-        Generate exactly 5 technical interview questions for each of these skills: {', '.join(skills)}.
-        Difficulty level: {difficulty}.
+        # Convert question types to a more readable format
+        question_types_str = []
+        if question_types:
+            if question_types.get('technical'):
+                question_types_str.append('technical')
+            if question_types.get('behavioral'):
+                question_types_str.append('behavioral')
+            if question_types.get('situational'):
+                question_types_str.append('situational')
         
-        Return ONLY a valid JSON array (no additional text or markdown) where each object has:
-        - 'skill' (string)
+        # Determine if we should use skills or job description as the primary source
+        use_job_description = bool(job_description) and not skills
+        
+        prompt = f"""
+        Generate interview questions based on the following parameters:
+        
+        {'Job Description: ' + job_description if use_job_description else 'Skills: ' + ', '.join(skills)}
+        Experience Level: {experience_level}
+        Difficulty Level: {difficulty}
+        Question Types: {', '.join(question_types_str) if question_types_str else 'all types'}
+        
+        Generate 3-5 questions {'based on the job description' if use_job_description else 'for each skill'}, considering:
+        1. The experience level of the candidate
+        2. The specific question types requested
+        3. The difficulty level specified
+        {'4. The context and requirements from the job description' if use_job_description else ''}
+        
+        Return ONLY a valid JSON array where each object has:
+        - 'skill' (string - {'extracted from job description' if use_job_description else 'matching the provided skills'})
         - 'question' (string)
         - 'difficulty' (string matching one of: 'easy', 'medium', 'hard')
+        - 'type' (string matching one of: 'technical', 'behavioral', 'situational')
         
         Example format:
         [
           {{
             "skill": "Python",
             "question": "Explain the difference between lists and tuples in Python.",
-            "difficulty": "easy"
+            "difficulty": "easy",
+            "type": "technical"
           }},
           {{
             "skill": "React",
-            "question": "What is the virtual DOM and how does it work?",
-            "difficulty": "medium"
+            "question": "Describe a challenging project you worked on and how you handled it.",
+            "difficulty": "medium",
+            "type": "behavioral"
           }}
         ]
         
@@ -84,6 +110,9 @@ def generate_questions_with_gemini(skills, api_key, difficulty='medium'):
         - Do not include any markdown syntax
         - Do not include any additional text or explanations
         - Ensure all brackets and quotes are properly closed
+        - Questions should be relevant to {'the job description' if use_job_description else 'the specified skills'}
+        - Difficulty should match the specified difficulty level
+        - Experience level should be considered in question complexity
         """
         
         response = model.generate_content(prompt)
@@ -100,7 +129,7 @@ def generate_questions_with_gemini(skills, api_key, difficulty='medium'):
                 raise ValueError("Response is not a JSON array")
                 
             for q in questions:
-                if not all(k in q for k in ['skill', 'question', 'difficulty']):
+                if not all(k in q for k in ['skill', 'question', 'difficulty', 'type']):
                     raise ValueError("Missing required fields in question object")
                     
             return questions
