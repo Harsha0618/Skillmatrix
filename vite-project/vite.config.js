@@ -32,6 +32,7 @@ export default defineConfig({
   },
   preview: {
     host: '0.0.0.0',  // Required for Render preview mode
+    allowedHosts: ['skillmatrix-vja0.onrender.com'],
     port: 5173,
     strictPort: true,
   },
